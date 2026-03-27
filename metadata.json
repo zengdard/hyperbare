@@ -1,0 +1,7 @@
+{
+  "uuid": "hyperliquid-bar@hyperbare",
+  "name": "Hyperliquid Price Bar",
+  "description": "Affiche les prix HL dans la barre supérieure",
+  "shell-version": ["45", "46", "47", "48", "49"],
+  "version": 2
+}

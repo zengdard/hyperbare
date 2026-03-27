@@ -1,0 +1,39 @@
+/* Conteneur d'un ticket */
+.hl-ticker-box {
+    padding: 0 8px;
+    border-right: 1px solid #555;
+}
+
+.hl-ticker-box:last-child {
+    border-right: none;
+}
+
+/* Style du nom (ex: BTC) */
+.hl-name {
+    color: #aaaaaa;
+    font-weight: bold;
+    margin-right: 6px;
+}
+
+/* Style du prix */
+.hl-price {
+    color: #ffffff;
+    font-family: monospace;
+    margin-right: 6px;
+}
+
+/* Pourcentages */
+.hl-pct-neutral {
+    color: #888888;
+    font-size: 0.9em;
+}
+
+.hl-pct-up {
+    color: #00ff00; /* Vert */
+    font-size: 0.9em;
+}
+
+.hl-pct-down {
+    color: #ff3333; /* Rouge */
+    font-size: 0.9em;
+}
