@@ -62,12 +62,13 @@ export default class HyperliquidExtension extends Extension {
     }
 
     _onData(coin, data) {
+        log(`[Hyperliquid] _onData received for ${coin}: ${JSON.stringify(data)}`);
         this._data[coin] = data;
         this._lastUpdate[coin] = Date.now();
-        
+
         // Ajouter à la liste des mises à jour en attente
         this._pendingUpdates.add(coin);
-        
+
         // Throttle les mises à jour UI
         if (!this._updateThrottleId) {
             this._updateThrottleId = GLib.timeout_add(
