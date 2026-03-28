@@ -5,6 +5,16 @@ A GNOME Shell extension that displays real-time cryptocurrency prices from Hyper
 ![GNOME Shell Version](https://img.shields.io/badge/GNOME-45%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+## Screenshot
+
+![Extension Screenshot](screenshot.png)
+
+## Demo Video
+
+https://github.com/user-attachments/assets/demo.mp4
+
+> Click to view the full demo video showing the extension in action.
+
 ## Features
 
 - **Real-time price updates** via WebSocket connection to Hyperliquid
