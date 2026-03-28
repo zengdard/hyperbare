@@ -2,11 +2,9 @@ import St from 'gi://St';
 
 export class PanelView {
     constructor() {
-        this.box = new St.BoxLayout({ 
-            vertical: true, 
-            style: 'padding: 15px; spacing: 12px;' 
-        });
+        this.box = null;
         this._items = {};
+        this._menu = null;
     }
 
     setMenu(menu) {
@@ -56,6 +54,12 @@ export class PanelView {
     }
 
     initUI(tickers) {
+        if (!this.box) {
+            this.box = new St.BoxLayout({
+                vertical: true,
+                style: 'padding: 15px; spacing: 12px;'
+            });
+        }
         this.box.destroy_all_children();
         this._items = {};
         

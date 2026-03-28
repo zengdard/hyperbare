@@ -26,15 +26,14 @@ export class WsManager {
         this._callback = callback;
         this._data = {};
         this._connections = new Map();
-        
-        // Initialiser les données pour tous les tickers
-        ALL_TICKERS.forEach(t => {
-            this._data[t] = { price: 0, pct: 0, funding: 0 };
-        });
     }
 
     start() {
-        log('[Hyperliquid] Starting WebSocket connections...');
+        // Initialize data for all tickers
+        ALL_TICKERS.forEach(t => {
+            this._data[t] = { price: 0, pct: 0, funding: 0 };
+        });
+        
         // Connexion pour les tickers standards
         this._initWS('default', STANDARD_TICKERS);
 
@@ -43,19 +42,28 @@ export class WsManager {
     }
 
     stop() {
-        // Arrêter toutes les connexions
+        // Arrêter toutes les connexions et déconnecter les signaux
         for (const [dex, conn] of this._connections) {
             if (conn.reconnectId) {
                 GLib.source_remove(conn.reconnectId);
+                conn.reconnectId = null;
             }
             if (conn.ws) {
-                try { conn.ws.close(0, ""); } catch(e) {}
+                try {
+                    conn.ws.disconnect_by_func(this._onWsClosed);
+                    conn.ws.disconnect_by_func(this._onWsError);
+                    conn.ws.disconnect_by_func(this._onWsMessage);
+                    conn.ws.close(0, "");
+                } catch(e) {}
+                conn.ws = null;
             }
             if (conn.session) {
                 try { conn.session.abort(); } catch(e) {}
+                conn.session = null;
             }
         }
         this._connections.clear();
+        this._data = {};
     }
 
     _scheduleReconnect(dex, tickers) {
@@ -105,26 +113,14 @@ export class WsManager {
                 conn.ws = sess.websocket_connect_finish(res);
                 
                 // Supprimer le timer de reconnexion si la connexion réussit
-                log(`[Hyperliquid] WebSocket connected for ${dex}`);
                 if (conn.reconnectId) {
                     GLib.source_remove(conn.reconnectId);
                     conn.reconnectId = null;
                 }
 
-                conn.ws.connect('closed', () => {
-                    log(`[Hyperliquid] WebSocket closed for ${dex}`);
-                    this._scheduleReconnect(dex, tickers);
-                });
-                conn.ws.connect('error', (ws, error) => {
-                    log(`[Hyperliquid] WebSocket error for ${dex}: ${error}`);
-                    this._scheduleReconnect(dex, tickers);
-                });
-                conn.ws.connect('message', (connection, type, data) => {
-                    if (type === Soup.WebsocketDataType.TEXT) {
-                        let str = new TextDecoder().decode(data.get_data());
-                        this._onMessage(str);
-                    }
-                });
+                conn.ws.connect('closed', this._onWsClosed.bind(this, dex, tickers));
+                conn.ws.connect('error', this._onWsError.bind(this, dex, tickers));
+                conn.ws.connect('message', this._onWsMessage.bind(this));
 
                 // Souscrire aux tickers
                 tickers.forEach(ticker => {
@@ -142,22 +138,34 @@ export class WsManager {
 
                     try {
                         conn.ws.send_text(sub);
-                        log(`[Hyperliquid] Subscribed to ${ticker}`);
                     } catch(e) {
-                        log(`[Hyperliquid] Failed to subscribe to ${ticker}: ${e.message}`);
+                        // Silently fail
                     }
                 });
             } catch (e) {
-                log(`[Hyperliquid] WebSocket connection error for ${dex}: ${e.message}`);
                 this._scheduleReconnect(dex, tickers);
             }
         });
     }
 
+    _onWsClosed(dex, tickers) {
+        this._scheduleReconnect(dex, tickers);
+    }
+
+    _onWsError(dex, tickers, ws, error) {
+        this._scheduleReconnect(dex, tickers);
+    }
+
+    _onWsMessage(connection, type, data) {
+        if (type === Soup.WebsocketDataType.TEXT) {
+            let str = new TextDecoder().decode(data.get_data());
+            this._onMessage(str);
+        }
+    }
+
     _onMessage(str) {
         try {
             let json = JSON.parse(str);
-            log(`[Hyperliquid] Received message: ${str.substring(0, 100)}...`);
             if (json.channel === "activeAssetCtx" && json.data && json.data.ctx) {
                 let coin = json.data.coin;
                 let ctx = json.data.ctx;
@@ -186,12 +194,11 @@ export class WsManager {
 
                     // Appeler le callback avec le nom d'affichage
                     const displayName = DISPLAY_NAMES[dataKey] || dataKey;
-                    log(`[Hyperliquid] Updated ${displayName}: ${p.toFixed(2)} USDC (${pct.toFixed(2)}%)`);
                     if (this._callback) this._callback(displayName, this._data[dataKey]);
                 }
             }
         } catch (e) {
-            log(`[Hyperliquid] Parse error: ${e.message}`);
+            // Silently ignore parse errors
         }
     }
 }

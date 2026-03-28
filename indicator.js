@@ -4,13 +4,16 @@ const MAX_VISIBLE_TICKERS = 3;
 
 export class IndicatorBar {
     constructor() {
-        this.actor = new St.BoxLayout({ 
-            style: 'spacing: 5px;'
-        });
+        this.actor = null;
         this._labels = {};
     }
 
     createUI(tickers) {
+        if (!this.actor) {
+            this.actor = new St.BoxLayout({
+                style: 'spacing: 5px;'
+            });
+        }
         this.actor.destroy_all_children();
         this._labels = {};
         

@@ -62,7 +62,6 @@ export default class HyperliquidExtension extends Extension {
     }
 
     _onData(coin, data) {
-        log(`[Hyperliquid] _onData received for ${coin}: ${JSON.stringify(data)}`);
         this._data[coin] = data;
         this._lastUpdate[coin] = Date.now();
 
@@ -123,22 +122,44 @@ export default class HyperliquidExtension extends Extension {
     }
 
     disable() {
+        // Remove all main loop sources
         if (this._staleCheckId) {
             GLib.source_remove(this._staleCheckId);
             this._staleCheckId = null;
         }
-        
+
         if (this._updateThrottleId) {
             GLib.source_remove(this._updateThrottleId);
             this._updateThrottleId = null;
         }
-        
-        if (this._ws) this._ws.stop();
-        this._indicator?.destroy();
-        this._indicator = null;
-        this._ws = null;
-        this._bar = null;
-        this._view = null;
+
+        // Stop WebSocket
+        if (this._ws) {
+            this._ws.stop();
+            this._ws = null;
+        }
+
+        // Destroy all UI objects
+        if (this._indicator) {
+            this._indicator.destroy();
+            this._indicator = null;
+        }
+
+        if (this._bar) {
+            if (this._bar.actor) {
+                this._bar.actor.destroy();
+            }
+            this._bar = null;
+        }
+
+        if (this._view) {
+            if (this._view.box) {
+                this._view.box.destroy();
+            }
+            this._view = null;
+        }
+
+        // Clear data structures
         this._data = {};
         this._lastUpdate = {};
         this._pendingUpdates.clear();

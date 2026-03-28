@@ -1,7 +1,8 @@
 {
   "uuid": "hyperliquid-bar@hyperbare",
   "name": "Hyperliquid Price Bar",
-  "description": "Affiche les prix HL dans la barre supérieure",
-  "shell-version": ["45", "46", "47", "48", "49"],
-  "version": 2
+  "description": "Display real-time Hyperliquid cryptocurrency prices in the GNOME top panel.\n\nFeatures:\n* Top 3 tickers visible directly in the panel\n* Click to expand and see all tickers with price charts\n* Real-time WebSocket updates\n* Shows price, 24h change percentage, and funding rates",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/zengdard/hyperbare",
+  "session-modes": ["user"]
 }
