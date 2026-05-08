@@ -1,204 +1,178 @@
 import Soup from 'gi://Soup';
 import GLib from 'gi://GLib';
 
-// Tickers standards (DEX par défaut)
-const STANDARD_TICKERS = ['BTC', 'ETH', 'SOL', 'HYPE'];
-
-// Tickers HIP-3 (DEX xyz)
-const XYZ_TICKERS = ['xyz:CL', 'xyz:XYZ100', 'xyz:GOLD'];
-
-// Tous les tickers à surveiller
-const ALL_TICKERS = [...STANDARD_TICKERS, ...XYZ_TICKERS];
-
-// Mapping des noms API vers noms d'affichage
-const DISPLAY_NAMES = {
-    'BTC': 'BTC',
-    'ETH': 'ETH',
-    'SOL': 'SOL',
-    'HYPE': 'HYPE',
-    'xyz:CL': 'BRENT',
-    'xyz:XYZ100': 'XYZ100',
-    'xyz:GOLD': 'GOLD'
-};
-
 export class WsManager {
     constructor(callback) {
-        this._callback = callback;
-        this._data = {};
-        this._connections = new Map();
+        this._callback = callback
+        this._data = {}
+        this._connections = new Map()
+        this._displayNames = {}
     }
 
-    start() {
-        // Initialize data for all tickers
-        ALL_TICKERS.forEach(t => {
-            this._data[t] = { price: 0, pct: 0, funding: 0 };
-        });
-        
-        // Connexion pour les tickers standards
-        this._initWS('default', STANDARD_TICKERS);
+    start(tickersByDex, displayNames) {
+        this.stop()
 
-        // Connexion pour les tickers xyz (HIP-3)
-        this._initWS('xyz', XYZ_TICKERS);
+        this._data = {}
+        this._displayNames = displayNames || {}
+
+        for (const [dex, tickers] of Object.entries(tickersByDex)) {
+            tickers.forEach(t => {
+                this._data[t] = { price: 0, pct: 0, funding: 0 }
+            })
+            if (tickers.length > 0) {
+                this._initWS(dex, tickers)
+            }
+        }
     }
 
     stop() {
-        // Arrêter toutes les connexions et déconnecter les signaux
-        for (const [dex, conn] of this._connections) {
+        for (const [_dex, conn] of this._connections) {
             if (conn.reconnectId) {
-                GLib.source_remove(conn.reconnectId);
-                conn.reconnectId = null;
+                GLib.source_remove(conn.reconnectId)
+                conn.reconnectId = null
             }
             if (conn.ws) {
                 try {
-                    conn.ws.disconnect_by_func(this._onWsClosed);
-                    conn.ws.disconnect_by_func(this._onWsError);
-                    conn.ws.disconnect_by_func(this._onWsMessage);
-                    conn.ws.close(0, "");
-                } catch(e) {}
-                conn.ws = null;
+                    conn.ws.disconnect_by_func(this._onWsClosed)
+                    conn.ws.disconnect_by_func(this._onWsError)
+                    conn.ws.disconnect_by_func(this._onWsMessage)
+                    conn.ws.close(0, '')
+                } catch (e) {}
+                conn.ws = null
             }
             if (conn.session) {
-                try { conn.session.abort(); } catch(e) {}
-                conn.session = null;
+                try { conn.session.abort() } catch (e) {}
+                conn.session = null
             }
         }
-        this._connections.clear();
-        this._data = {};
+        this._connections.clear()
+        this._data = {}
+        this._displayNames = {}
     }
 
-    _scheduleReconnect(dex, tickers) {
-        const conn = this._connections.get(dex);
-        if (!conn) return;
-        
+    _scheduleReconnect(dex) {
+        const conn = this._connections.get(dex)
+        if (!conn) return
+
         if (conn.reconnectId) {
-            GLib.source_remove(conn.reconnectId);
+            GLib.source_remove(conn.reconnectId)
         }
-        
+
         conn.reconnectId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 15, () => {
-            this._initWS(dex, tickers);
-            return GLib.SOURCE_REMOVE;
-        });
+            this._initWS(dex, conn.tickers)
+            return GLib.SOURCE_REMOVE
+        })
     }
 
     _initWS(dex, tickers) {
-        // Nettoyer l'ancienne connexion si elle existe
-        const existingConn = this._connections.get(dex);
+        const existingConn = this._connections.get(dex)
         if (existingConn) {
             if (existingConn.ws) {
-                try { existingConn.ws.close(0, ""); } catch(e) {}
+                try { existingConn.ws.close(0, '') } catch (e) {}
             }
             if (existingConn.session) {
-                try { existingConn.session.abort(); } catch(e) {}
+                try { existingConn.session.abort() } catch (e) {}
             }
             if (existingConn.reconnectId) {
-                GLib.source_remove(existingConn.reconnectId);
+                GLib.source_remove(existingConn.reconnectId)
             }
         }
-        
-        // Créer une nouvelle connexion
+
         const conn = {
             session: new Soup.Session(),
             ws: null,
-            reconnectId: null
-        };
-        this._connections.set(dex, conn);
-        
+            reconnectId: null,
+            tickers: tickers
+        }
+        this._connections.set(dex, conn)
+
         let msg = new Soup.Message({
             method: 'GET',
             uri: GLib.Uri.parse('wss://api.hyperliquid.xyz/ws', GLib.UriFlags.NONE)
-        });
+        })
 
         conn.session.websocket_connect_async(msg, null, null, null, null, (sess, res) => {
             try {
-                conn.ws = sess.websocket_connect_finish(res);
-                
-                // Supprimer le timer de reconnexion si la connexion réussit
+                conn.ws = sess.websocket_connect_finish(res)
+
                 if (conn.reconnectId) {
-                    GLib.source_remove(conn.reconnectId);
-                    conn.reconnectId = null;
+                    GLib.source_remove(conn.reconnectId)
+                    conn.reconnectId = null
                 }
 
-                conn.ws.connect('closed', this._onWsClosed.bind(this, dex, tickers));
-                conn.ws.connect('error', this._onWsError.bind(this, dex, tickers));
-                conn.ws.connect('message', this._onWsMessage.bind(this));
+                conn.ws.connect('closed', this._onWsClosed.bind(this, dex))
+                conn.ws.connect('error', this._onWsError.bind(this, dex))
+                conn.ws.connect('message', this._onWsMessage.bind(this))
 
-                // Souscrire aux tickers
-                tickers.forEach(ticker => {
-                    let subscription = { type: "activeAssetCtx", coin: ticker };
+                conn.tickers.forEach(ticker => {
+                    let subscription = { type: 'activeAssetCtx', coin: ticker }
 
-                    // Pour les actifs HIP-3, ajouter le paramètre dex
                     if (dex !== 'default') {
-                        subscription.dex = dex;
+                        subscription.dex = dex
                     }
 
                     let sub = JSON.stringify({
-                        method: "subscribe",
+                        method: 'subscribe',
                         subscription: subscription
-                    });
+                    })
 
                     try {
-                        conn.ws.send_text(sub);
-                    } catch(e) {
-                        // Silently fail
-                    }
-                });
+                        conn.ws.send_text(sub)
+                    } catch (e) {}
+                })
             } catch (e) {
-                this._scheduleReconnect(dex, tickers);
+                this._scheduleReconnect(dex)
             }
-        });
+        })
     }
 
-    _onWsClosed(dex, tickers) {
-        this._scheduleReconnect(dex, tickers);
+    _onWsClosed(dex) {
+        const conn = this._connections.get(dex)
+        if (conn) this._scheduleReconnect(dex)
     }
 
-    _onWsError(dex, tickers, ws, error) {
-        this._scheduleReconnect(dex, tickers);
+    _onWsError(dex, _ws, _error) {
+        const conn = this._connections.get(dex)
+        if (conn) this._scheduleReconnect(dex)
     }
 
-    _onWsMessage(connection, type, data) {
+    _onWsMessage(_connection, type, data) {
         if (type === Soup.WebsocketDataType.TEXT) {
-            let str = new TextDecoder().decode(data.get_data());
-            this._onMessage(str);
+            let str = new TextDecoder().decode(data.get_data())
+            this._onMessage(str)
         }
     }
 
     _onMessage(str) {
         try {
-            let json = JSON.parse(str);
-            if (json.channel === "activeAssetCtx" && json.data && json.data.ctx) {
-                let coin = json.data.coin;
-                let ctx = json.data.ctx;
-                
-                // Le coin peut être avec ou sans préfixe selon la réponse
-                // Essayer de trouver dans nos données
-                let dataKey = coin;
+            let json = JSON.parse(str)
+            if (json.channel === 'activeAssetCtx' && json.data && json.data.ctx) {
+                let coin = json.data.coin
+                let ctx = json.data.ctx
+
+                let dataKey = coin
                 if (!this._data[dataKey]) {
-                    // Essayer avec préfixe xyz: si ce n'est pas déjà le cas
                     if (!coin.startsWith('xyz:')) {
-                        dataKey = 'xyz:' + coin;
+                        dataKey = 'xyz:' + coin
                     }
                 }
-                
+
                 if (this._data[dataKey]) {
-                    let p = parseFloat(ctx.markPx) || parseFloat(ctx.midPx) || 0;
-                    let prev = parseFloat(ctx.prevDayPx) || p;
-                    let pct = prev > 0 ? ((p - prev) / prev) * 100 : 0;
-                    let fundingVal = parseFloat(ctx.funding) || 0;
+                    let p = parseFloat(ctx.markPx) || parseFloat(ctx.midPx) || 0
+                    let prev = parseFloat(ctx.prevDayPx) || p
+                    let pct = prev > 0 ? ((p - prev) / prev) * 100 : 0
+                    let fundingVal = parseFloat(ctx.funding) || 0
 
                     this._data[dataKey] = {
                         price: p,
                         pct: pct,
                         funding: fundingVal
-                    };
+                    }
 
-                    // Appeler le callback avec le nom d'affichage
-                    const displayName = DISPLAY_NAMES[dataKey] || dataKey;
-                    if (this._callback) this._callback(displayName, this._data[dataKey]);
+                    const displayName = this._displayNames[dataKey] || dataKey
+                    if (this._callback) this._callback(displayName, this._data[dataKey])
                 }
             }
-        } catch (e) {
-            // Silently ignore parse errors
-        }
+        } catch (e) {}
     }
 }
