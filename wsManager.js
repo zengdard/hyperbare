@@ -1,5 +1,7 @@
-import Soup from 'gi://Soup';
-import GLib from 'gi://GLib';
+import Soup from 'gi://Soup'
+import GLib from 'gi://GLib'
+
+const RECONNECT_DELAY_S = 15
 
 export class WsManager {
     constructor(callback) {
@@ -7,6 +9,7 @@ export class WsManager {
         this._data = {}
         this._connections = new Map()
         this._displayNames = {}
+        this._session = null
     }
 
     start(tickersByDex, displayNames) {
@@ -14,6 +17,7 @@ export class WsManager {
 
         this._data = {}
         this._displayNames = displayNames || {}
+        this._session = new Soup.Session()
 
         for (const [dex, tickers] of Object.entries(tickersByDex)) {
             tickers.forEach(t => {
@@ -27,27 +31,30 @@ export class WsManager {
 
     stop() {
         for (const [_dex, conn] of this._connections) {
-            if (conn.reconnectId) {
-                GLib.source_remove(conn.reconnectId)
-                conn.reconnectId = null
-            }
-            if (conn.ws) {
-                try {
-                    conn.ws.disconnect_by_func(this._onWsClosed)
-                    conn.ws.disconnect_by_func(this._onWsError)
-                    conn.ws.disconnect_by_func(this._onWsMessage)
-                    conn.ws.close(0, '')
-                } catch (e) {}
-                conn.ws = null
-            }
-            if (conn.session) {
-                try { conn.session.abort() } catch (e) {}
-                conn.session = null
-            }
+            this._closeConn(conn)
         }
         this._connections.clear()
+
+        if (this._session) {
+            try { this._session.abort() } catch (e) {}
+            this._session = null
+        }
         this._data = {}
         this._displayNames = {}
+    }
+
+    _closeConn(conn) {
+        if (conn.reconnectId) {
+            GLib.source_remove(conn.reconnectId)
+            conn.reconnectId = null
+        }
+        if (conn.ws) {
+            try {
+                conn.ws.disconnectObject(this)
+                conn.ws.close(0, '')
+            } catch (e) {}
+            conn.ws = null
+        }
     }
 
     _scheduleReconnect(dex) {
@@ -58,51 +65,43 @@ export class WsManager {
             GLib.source_remove(conn.reconnectId)
         }
 
-        conn.reconnectId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 15, () => {
-            this._initWS(dex, conn.tickers)
-            return GLib.SOURCE_REMOVE
-        })
+        conn.reconnectId = GLib.timeout_add_seconds(
+            GLib.PRIORITY_DEFAULT, RECONNECT_DELAY_S, () => {
+                conn.reconnectId = null
+                this._initWS(dex, conn.tickers)
+                return GLib.SOURCE_REMOVE
+            }
+        )
     }
 
     _initWS(dex, tickers) {
-        const existingConn = this._connections.get(dex)
-        if (existingConn) {
-            if (existingConn.ws) {
-                try { existingConn.ws.close(0, '') } catch (e) {}
-            }
-            if (existingConn.session) {
-                try { existingConn.session.abort() } catch (e) {}
-            }
-            if (existingConn.reconnectId) {
-                GLib.source_remove(existingConn.reconnectId)
-            }
+        const existing = this._connections.get(dex)
+        if (existing) {
+            this._closeConn(existing)
         }
 
         const conn = {
-            session: new Soup.Session(),
             ws: null,
             reconnectId: null,
-            tickers: tickers
+            tickers: tickers,
         }
         this._connections.set(dex, conn)
 
         let msg = new Soup.Message({
             method: 'GET',
-            uri: GLib.Uri.parse('wss://api.hyperliquid.xyz/ws', GLib.UriFlags.NONE)
+            uri: GLib.Uri.parse('wss://api.hyperliquid.xyz/ws', GLib.UriFlags.NONE),
         })
 
-        conn.session.websocket_connect_async(msg, null, null, null, null, (sess, res) => {
+        this._session.websocket_connect_async(msg, null, null, null, null, (sess, res) => {
             try {
                 conn.ws = sess.websocket_connect_finish(res)
 
-                if (conn.reconnectId) {
-                    GLib.source_remove(conn.reconnectId)
-                    conn.reconnectId = null
-                }
-
-                conn.ws.connect('closed', this._onWsClosed.bind(this, dex))
-                conn.ws.connect('error', this._onWsError.bind(this, dex))
-                conn.ws.connect('message', this._onWsMessage.bind(this))
+                conn.ws.connectObject(
+                    'closed', this._onWsClosed.bind(this, dex),
+                    'error', this._onWsError.bind(this, dex),
+                    'message', this._onWsMessage.bind(this),
+                    this
+                )
 
                 conn.tickers.forEach(ticker => {
                     let subscription = { type: 'activeAssetCtx', coin: ticker }
@@ -113,7 +112,7 @@ export class WsManager {
 
                     let sub = JSON.stringify({
                         method: 'subscribe',
-                        subscription: subscription
+                        subscription: subscription,
                     })
 
                     try {
@@ -166,7 +165,7 @@ export class WsManager {
                     this._data[dataKey] = {
                         price: p,
                         pct: pct,
-                        funding: fundingVal
+                        funding: fundingVal,
                     }
 
                     const displayName = this._displayNames[dataKey] || dataKey
