@@ -1,11 +1,11 @@
-import Soup from 'gi://Soup';
-import GLib from 'gi://GLib';
+import Soup from 'gi://Soup'
+import GLib from 'gi://GLib'
 
-const INFO_URL = 'https://api.hyperliquid.xyz/info';
+const INFO_URL = 'https://api.hyperliquid.xyz/info'
 
 export class ApiManager {
     constructor() {
-        this._session = new Soup.Session();
+        this._session = new Soup.Session()
     }
 
     fetchPerpsMeta(callback) {
@@ -19,7 +19,7 @@ export class ApiManager {
     _post(body, callback) {
         let msg = new Soup.Message({
             method: 'POST',
-            uri: GLib.Uri.parse(INFO_URL, GLib.UriFlags.NONE)
+            uri: GLib.Uri.parse(INFO_URL, GLib.UriFlags.NONE),
         })
         msg.request_headers.append('Content-Type', 'application/json')
         let bodyStr = JSON.stringify(body)

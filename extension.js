@@ -1,21 +1,21 @@
-import St from 'gi://St';
-import GLib from 'gi://GLib';
-import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
-import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
+import St from 'gi://St'
+import GLib from 'gi://GLib'
+import * as Main from 'resource:///org/gnome/shell/ui/main.js'
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js'
+import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js'
 
-import { ApiManager } from './apiManager.js';
-import { WsManager } from './wsManager.js';
-import { IndicatorBar } from './indicator.js';
-import { PanelView } from './panelView.js';
+import { ApiManager } from './apiManager.js'
+import { WsManager } from './wsManager.js'
+import { IndicatorBar } from './indicator.js'
+import { PanelView } from './panelView.js'
 
-const DESIRED_TICKERS = ['BTC', 'ETH', 'SOL', 'HYPE', 'BRENT', 'XYZ100', 'GOLD'];
-const DATA_STALE_THRESHOLD_MS = 30000;
-const UI_UPDATE_THROTTLE_MS = 200;
+const DESIRED_TICKERS = ['BTC', 'ETH', 'SOL', 'HYPE', 'BRENT', 'XYZ100', 'GOLD']
+const DATA_STALE_THRESHOLD_MS = 30000
+const UI_UPDATE_THROTTLE_MS = 200
 
 const DEFAULT_TICKERS_BY_DEX = {
     default: ['BTC', 'ETH', 'SOL', 'HYPE'],
-    xyz: ['xyz:CL', 'xyz:XYZ100', 'xyz:GOLD']
+    xyz: ['xyz:CL', 'xyz:XYZ100', 'xyz:GOLD'],
 }
 
 const DEFAULT_DISPLAY_NAMES = {
@@ -25,11 +25,11 @@ const DEFAULT_DISPLAY_NAMES = {
     'HYPE': 'HYPE',
     'xyz:CL': 'BRENT',
     'xyz:XYZ100': 'XYZ100',
-    'xyz:GOLD': 'GOLD'
+    'xyz:GOLD': 'GOLD',
 }
 
 const SPOT_DISPLAY_OVERRIDES = {
-    'CL': 'BRENT'
+    'CL': 'BRENT',
 }
 
 export default class HyperliquidExtension extends Extension {
@@ -58,7 +58,7 @@ export default class HyperliquidExtension extends Extension {
         this._view = new PanelView()
         this._view.box = new St.BoxLayout({
             vertical: true,
-            style: 'padding: 15px; spacing: 12px;'
+            style: 'padding: 15px; spacing: 12px;',
         })
         this._view.setMenu(this._indicator.menu)
         this._indicator.menu.box.add_child(this._view.box)
