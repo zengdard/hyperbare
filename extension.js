@@ -46,22 +46,26 @@ export default class HyperliquidExtension extends Extension {
         this._initIdleId = null
         this._pendingUpdates = new Set()
         this._updateThrottleId = null
+        this._barBox = null
+        this._viewBox = null
     }
 
     enable() {
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false)
 
         this._bar = new IndicatorBar()
-        this._bar.actor = new St.BoxLayout({ style: 'spacing: 5px;' })
-        this._indicator.add_child(this._bar.actor)
+        this._barBox = new St.BoxLayout({ style: 'spacing: 5px;' })
+        this._bar.actor = this._barBox
+        this._indicator.add_child(this._barBox)
 
         this._view = new PanelView()
-        this._view.box = new St.BoxLayout({
+        this._viewBox = new St.BoxLayout({
             vertical: true,
             style: 'padding: 15px; spacing: 12px;',
         })
+        this._view.box = this._viewBox
         this._view.setMenu(this._indicator.menu)
-        this._indicator.menu.box.add_child(this._view.box)
+        this._indicator.menu.box.add_child(this._viewBox)
 
         Main.panel.addToStatusArea(this.uuid, this._indicator)
 
@@ -260,23 +264,21 @@ export default class HyperliquidExtension extends Extension {
             this._api = null
         }
 
-        if (this._indicator) {
-            this._indicator.destroy()
-            this._indicator = null
-        }
-
         if (this._bar) {
-            if (this._bar.actor) {
-                this._bar.actor.destroy()
-            }
+            this._barBox.destroy()
+            this._barBox = null
             this._bar = null
         }
 
         if (this._view) {
-            if (this._view.box) {
-                this._view.box.destroy()
-            }
+            this._viewBox.destroy()
+            this._viewBox = null
             this._view = null
+        }
+
+        if (this._indicator) {
+            this._indicator.destroy()
+            this._indicator = null
         }
 
         this._data = {}
