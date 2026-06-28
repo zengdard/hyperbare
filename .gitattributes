@@ -1,2 +1,6 @@
 .gitignore export-ignore
 .gitattributes export-ignore
+AGENTS.md export-ignore
+demo.mp4 export-ignore
+screenshot.png export-ignore
+hyperliquid-bar@hyperbare.zip export-ignore
