@@ -36,7 +36,7 @@ export class WsManager {
         this._connections.clear()
 
         if (this._session) {
-            try { this._session.abort() } catch (e) {}
+            this._session.abort()
             this._session = null
         }
         this._data = {}

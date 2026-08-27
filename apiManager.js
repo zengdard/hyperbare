@@ -40,7 +40,7 @@ export class ApiManager {
     }
 
     destroy() {
-        try { this._session.abort() } catch (e) {}
+        this._session.abort()
         this._session = null
     }
 }

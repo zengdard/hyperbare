@@ -1,9 +1,14 @@
 import St from 'gi://St'
+import Clutter from 'gi://Clutter'
 
-const NAME_W = 70
+import { Sparkline } from './sparkline.js'
+
+const NAME_W = 90
 const PRICE_W = 100
 const PCT_W = 70
 const FUND_W = 90
+const SPARK_W = 110
+const SPARK_H = 26
 
 export class PanelView {
     constructor() {
@@ -47,7 +52,19 @@ export class PanelView {
         item.fundLabel.style = `color: ${fColor}; font-size: 0.9em; font-family: monospace;`
     }
 
-    initUI(tickers) {
+    updateSparkline(coin, history) {
+        const item = this._items[coin]
+        if (!item) return
+        item.sparkline.setHistory(history || [])
+    }
+
+    setIcon(coin, gicon) {
+        const item = this._items[coin]
+        if (!item || !item.icon || !gicon) return
+        item.icon.gicon = gicon
+    }
+
+    initUI(tickers, showLogos = false) {
         if (!this.box) {
             this.box = new St.BoxLayout({
                 vertical: true,
@@ -65,6 +82,7 @@ export class PanelView {
         headerRow.add_child(this._headerLabel('Price', PRICE_W))
         headerRow.add_child(this._headerLabel('24h', PCT_W))
         headerRow.add_child(this._headerLabel('Funding', FUND_W))
+        headerRow.add_child(this._headerLabel('Trend', SPARK_W))
 
         this.box.add_child(headerRow)
 
@@ -75,33 +93,55 @@ export class PanelView {
                 style: 'spacing: 15px; align: center; opacity: 0.4;',
             })
 
+            let nameBox = new St.BoxLayout({ style: 'spacing: 6px;' })
+            let icon = showLogos ? new St.Icon({ icon_size: 16 }) : null
+            if (icon) nameBox.add_child(icon)
             let name = new St.Label({
                 text: coin,
-                style: `font-weight: bold; color: #fff; font-size: 13px; min-width: ${NAME_W}px;`,
+                y_align: Clutter.ActorAlign.CENTER,
+                style: `font-weight: bold; color: #fff; font-size: 13px;`,
             })
+            nameBox.add_child(name)
+
+            let nameWrap = new St.Widget({
+                layout_manager: new Clutter.BinLayout(),
+                style: `min-width: ${NAME_W}px;`,
+                child: nameBox,
+            })
+
             let priceL = new St.Label({
                 text: '—',
+                y_align: Clutter.ActorAlign.CENTER,
                 style: `color: #ccc; font-size: 13px; font-family: monospace; min-width: ${PRICE_W}px;`,
             })
             let pctL = new St.Label({
                 text: '',
+                y_align: Clutter.ActorAlign.CENTER,
                 style: `font-size: 13px; min-width: ${PCT_W}px;`,
             })
             let fundL = new St.Label({
                 text: '',
+                y_align: Clutter.ActorAlign.CENTER,
                 style: `font-size: 12px; font-family: monospace; min-width: ${FUND_W}px;`,
             })
+            let sparkline = new Sparkline({
+                width: SPARK_W,
+                height: SPARK_H,
+            })
 
-            row.add_child(name)
+            row.add_child(nameWrap)
             row.add_child(priceL)
             row.add_child(pctL)
             row.add_child(fundL)
+            row.add_child(sparkline)
 
             list.add_child(row)
             this._items[coin] = {
+                icon: icon,
                 priceLabel: priceL,
                 pctLabel: pctL,
                 fundLabel: fundL,
+                sparkline: sparkline,
                 row: row,
             }
         })
@@ -112,6 +152,7 @@ export class PanelView {
     _headerLabel(text, width) {
         return new St.Label({
             text,
+            y_align: Clutter.ActorAlign.CENTER,
             style: `font-weight: bold; color: #aaa; font-size: 11px; min-width: ${width}px;`,
         })
     }
