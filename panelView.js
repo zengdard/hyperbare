@@ -106,8 +106,8 @@ export class PanelView {
             let nameWrap = new St.Widget({
                 layout_manager: new Clutter.BinLayout(),
                 style: `min-width: ${NAME_W}px;`,
-                child: nameBox,
             })
+            nameWrap.set_child(nameBox)
 
             let priceL = new St.Label({
                 text: '—',
