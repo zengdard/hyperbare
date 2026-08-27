@@ -2,7 +2,22 @@ import Soup from 'gi://Soup'
 import GLib from 'gi://GLib'
 import Gio from 'gi://Gio'
 
-const ICON_URL = 'https://app.hyperliquid.xyz/icon/'
+// L'endpoint app.hyperliquid.xyz sert du HTML pour les inconnues : on
+// valide donc toujours les octets de l'image avant de l'afficher
+const ICON_SOURCES = [
+    name => `https://app.hyperliquid.xyz/icon/${encodeURIComponent(name)}`,
+    // ~250 cryptos majeures, fichiers minuscules
+    name => `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/${encodeURIComponent(name.toLowerCase())}.png`,
+]
+
+function isImageData(bytes) {
+    const d = bytes.get_data()
+    if (d.length < 4) return false
+    const isPng = d[0] === 0x89 && d[1] === 0x50 && d[2] === 0x4e && d[3] === 0x47
+    const isJpeg = d[0] === 0xff && d[1] === 0xd8
+    const isGif = d[0] === 0x47 && d[1] === 0x49 && d[2] === 0x46
+    return isPng || isJpeg || isGif
+}
 
 export class IconManager {
     constructor() {
@@ -14,7 +29,7 @@ export class IconManager {
     }
 
     // Résout l'icône d'un asset. `displayName` sert d'identifiant d'UI,
-    // `iconNames` est la liste des symboles à essayer (ex: ['BRENT', 'xyz:CL']).
+    // `iconNames` la liste des symboles à essayer (ex: ['BRENT', 'xyz:CL']).
     // callback(gicon|null) est invoqué une seule fois.
     getIcon(displayName, iconNames, callback) {
         if (this._icons[displayName]) {
@@ -44,14 +59,19 @@ export class IconManager {
         return Gio.FileIcon.new(file)
     }
 
-    _fetchChain(displayName, remaining, callback) {
-        if (remaining.length === 0 || !this._session) {
+    // Essaie chaque nom × chaque source ; s'arrête à la première image valide
+    _fetchChain(displayName, names, callback, nameIndex = 0, sourceIndex = 0) {
+        if (!this._session || nameIndex >= names.length) {
             callback(null)
             return
         }
+        if (sourceIndex >= ICON_SOURCES.length) {
+            this._fetchChain(displayName, names, callback, nameIndex + 1, 0)
+            return
+        }
 
-        const name = remaining[0]
-        const url = ICON_URL + encodeURIComponent(name)
+        const name = names[nameIndex]
+        const url = ICON_SOURCES[sourceIndex](name)
         const msg = new Soup.Message({
             method: 'GET',
             uri: GLib.Uri.parse(url, GLib.UriFlags.NONE),
@@ -62,24 +82,21 @@ export class IconManager {
             try {
                 bytes = sess.send_and_read_finish(res)
             } catch (e) {
-                logError(e, `Icon download failed for ${name}`)
+                logError(e, `Icon download failed for ${name} (${url})`)
             }
 
-            if (!bytes || bytes.get_size() === 0) {
-                this._fetchChain(displayName, remaining.slice(1), callback)
-                return
+            if (bytes && bytes.get_size() > 0 && isImageData(bytes)) {
+                const path = this._cachePath(displayName)
+                const ok = GLib.file_set_contents(path, bytes.get_data())
+                if (ok) {
+                    const gicon = Gio.FileIcon.new(Gio.File.new_for_path(path))
+                    this._icons[displayName] = gicon
+                    callback(gicon)
+                    return
+                }
             }
 
-            const path = this._cachePath(displayName)
-            const [ok] = GLib.file_set_contents(path, bytes.get_data())
-            if (!ok) {
-                callback(null)
-                return
-            }
-
-            const gicon = Gio.FileIcon.new(Gio.File.new_for_path(path))
-            this._icons[displayName] = gicon
-            callback(gicon)
+            this._fetchChain(displayName, names, callback, nameIndex, sourceIndex + 1)
         })
     }
 
