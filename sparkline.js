@@ -25,9 +25,7 @@ export const Sparkline = GObject.registerClass(
             this.queue_repaint()
         }
 
-        vfunc_snapshot(snapshot) {
-            super.vfunc_snapshot(snapshot)
-
+        vfunc_repaint(snapshot) {
             if (this._history.length < 2) return
 
             const box = this.get_allocation_box()
