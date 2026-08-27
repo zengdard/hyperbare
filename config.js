@@ -16,9 +16,12 @@ export function loadConfig() {
         if (ok) {
             const parsed = JSON.parse(new TextDecoder().decode(contents))
             if (Array.isArray(parsed.tickers)) {
+                // Pas de mise en majuscules : les tickers Hyperliquid sont
+                // sensibles à la casse ('kPEPE') et le préfixe dex 'xyz:' est
+                // en minuscules
                 const names = parsed.tickers
                     .filter(t => typeof t === 'string' && t.trim().length > 0)
-                    .map(t => t.trim().toUpperCase())
+                    .map(t => t.trim())
                 if (names.length > 0) config.tickers = [...new Set(names)]
             }
             if (typeof parsed.showLogos === 'boolean') {

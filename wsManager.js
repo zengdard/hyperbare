@@ -1,16 +1,21 @@
 import Soup from 'gi://Soup'
 import GLib from 'gi://GLib'
+import GObject from 'gi://GObject'
 
 const RECONNECT_DELAY_S = 15
 
-export class WsManager {
-    constructor(callback) {
-        this._callback = callback
-        this._data = {}
-        this._connections = new Map()
-        this._displayNames = {}
-        this._session = null
-    }
+// GObject obligatoire : les WebsocketConnection sont reliées via
+// connectObject(this), qui exige une cible GObject
+export const WsManager = GObject.registerClass(
+    class WsManager extends GObject.Object {
+        _init(callback) {
+            super._init()
+            this._callback = callback
+            this._data = {}
+            this._connections = new Map()
+            this._displayNames = {}
+            this._session = null
+        }
 
     start(tickersByDex, displayNames) {
         this.stop()
@@ -49,10 +54,11 @@ export class WsManager {
             conn.reconnectId = null
         }
         if (conn.ws) {
-            try {
-                conn.ws.disconnectObject(this)
-                conn.ws.close(0, '')
-            } catch (e) {}
+            for (const id of conn.handlers) {
+                conn.ws.disconnect(id)
+            }
+            conn.handlers = []
+            conn.ws.close(0, '')
             conn.ws = null
         }
     }
@@ -82,6 +88,7 @@ export class WsManager {
 
         const conn = {
             ws: null,
+            handlers: [],
             reconnectId: null,
             tickers: tickers,
         }
@@ -96,12 +103,14 @@ export class WsManager {
             try {
                 conn.ws = sess.websocket_connect_finish(res)
 
-                conn.ws.connectObject(
-                    'closed', this._onWsClosed.bind(this, dex),
-                    'error', this._onWsError.bind(this, dex),
-                    'message', this._onWsMessage.bind(this),
-                    this
-                )
+                // connectObject n'est pas disponible sur les
+                // WebsocketConnection : connexion manuelle avec déconnexion
+                // explicite dans _closeConn
+                conn.handlers = [
+                    conn.ws.connect('closed', this._onWsClosed.bind(this, dex)),
+                    conn.ws.connect('error', this._onWsError.bind(this, dex)),
+                    conn.ws.connect('message', this._onWsMessage.bind(this)),
+                ]
 
                 conn.tickers.forEach(ticker => {
                     let subscription = { type: 'activeAssetCtx', coin: ticker }
@@ -117,7 +126,9 @@ export class WsManager {
 
                     try {
                         conn.ws.send_text(sub)
-                    } catch (e) {}
+                    } catch (e) {
+                        logError(e, `Failed to subscribe ${ticker} on ${dex}`)
+                    }
                 })
             } catch (e) {
                 this._scheduleReconnect(dex)
@@ -172,6 +183,8 @@ export class WsManager {
                     if (this._callback) this._callback(displayName, this._data[dataKey])
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+            logError(e, 'WS message handling failed')
+        }
     }
-}
+})

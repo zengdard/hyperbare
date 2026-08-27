@@ -65,7 +65,8 @@ export default class HyperliquidPreferences extends ExtensionPreferences {
     }
 
     _addTickerFromEntry(entry) {
-        const name = entry.get_text().trim().toUpperCase()
+        // Casse préservée : 'kPEPE', 'xyz:CL'… sont des identifiants exacts
+        const name = entry.get_text().trim()
         if (name.length === 0 || this._config.tickers.includes(name)) {
             entry.set_text('')
             return
