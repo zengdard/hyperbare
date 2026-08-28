@@ -93,7 +93,9 @@ export class PanelView {
                 style: 'spacing: 15px; align: center; opacity: 0.4;',
             })
 
-            let nameBox = new St.BoxLayout({ style: 'spacing: 6px;' })
+            let nameBox = new St.BoxLayout({
+                style: `spacing: 6px; min-width: ${NAME_W}px;`,
+            })
             let icon = showLogos ? new St.Icon({ icon_size: 16 }) : null
             if (icon) nameBox.add_child(icon)
             let name = new St.Label({
@@ -102,12 +104,6 @@ export class PanelView {
                 style: `font-weight: bold; color: #fff; font-size: 13px;`,
             })
             nameBox.add_child(name)
-
-            let nameWrap = new St.Widget({
-                layout_manager: new Clutter.BinLayout(),
-                style: `min-width: ${NAME_W}px;`,
-            })
-            nameWrap.set_child(nameBox)
 
             let priceL = new St.Label({
                 text: '—',
@@ -129,7 +125,7 @@ export class PanelView {
                 height: SPARK_H,
             })
 
-            row.add_child(nameWrap)
+            row.add_child(nameBox)
             row.add_child(priceL)
             row.add_child(pctL)
             row.add_child(fundL)
