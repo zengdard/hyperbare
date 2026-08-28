@@ -18,6 +18,10 @@ export const Sparkline = GObject.registerClass(
                 ...params,
             })
             this._history = []
+            // Le vfunc repaint n'est pas appelé avec le contexte Cairo dans
+            // les versions récentes : on passe par le signal 'repaint' qui
+            // fournit le cairo_t
+            this.connect('repaint', (_area, cr) => this._paint(cr))
         }
 
         setHistory(points) {
@@ -25,8 +29,7 @@ export const Sparkline = GObject.registerClass(
             this.queue_repaint()
         }
 
-        vfunc_repaint(snapshot) {
-            if (this._history.length < 2) return
+        _paint(cr) {
 
             const box = this.get_allocation_box()
             const width = box.x2 - box.x1
@@ -50,7 +53,6 @@ export const Sparkline = GObject.registerClass(
             const toY = price =>
                 VERTICAL_PAD + drawH * (1 - (price - min) / (max - min))
 
-            const cr = snapshot.cairo_context()
             const up = points[points.length - 1] >= points[0]
             const line = up ? LINE_UP : LINE_DOWN
             const fill = up ? FILL_UP : FILL_DOWN
