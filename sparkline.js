@@ -18,17 +18,16 @@ export const Sparkline = GObject.registerClass(
                 ...params,
             })
             this._history = []
-            // vfunc_repaint n'est pas appelé avec d'argument : le contexte
-            // Cairo s'obtient via get_context()
+            // NE PAS surcharger vfunc_repaint : c'est une machinerie interne
+            // de St.DrawingArea (mapping du buffer Cogl) et la surcharger
+            // provoque un double-unmap → segfault de tout le shell. Le signal
+            // 'repaint' fournit le contexte Cairo en argument
+            this.connect('repaint', (_area, cr) => this._paint(cr))
         }
 
         setHistory(points) {
             this._history = points || []
             this.queue_repaint()
-        }
-
-        vfunc_repaint() {
-            this._paint(this.get_context())
         }
 
         _paint(cr) {
