@@ -18,15 +18,17 @@ export const Sparkline = GObject.registerClass(
                 ...params,
             })
             this._history = []
-            // Le vfunc repaint n'est pas appelé avec le contexte Cairo dans
-            // les versions récentes : on passe par le signal 'repaint' qui
-            // fournit le cairo_t
-            this.connect('repaint', (_area, cr) => this._paint(cr))
+            // vfunc_repaint n'est pas appelé avec d'argument : le contexte
+            // Cairo s'obtient via get_context()
         }
 
         setHistory(points) {
             this._history = points || []
             this.queue_repaint()
+        }
+
+        vfunc_repaint() {
+            this._paint(this.get_context())
         }
 
         _paint(cr) {
