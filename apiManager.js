@@ -8,8 +8,14 @@ export class ApiManager {
         this._session = new Soup.Session()
     }
 
-    fetchPerpsMeta(callback) {
-        this._post({ type: 'meta' }, callback)
+    fetchPerpsMeta(callback, dex = null) {
+        const body = { type: 'meta' }
+        if (dex) body.dex = dex
+        this._post(body, callback)
+    }
+
+    fetchPerpDexs(callback) {
+        this._post({ type: 'perpDexs' }, callback)
     }
 
     fetchSpotMeta(callback) {

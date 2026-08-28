@@ -165,21 +165,20 @@ export default class HyperliquidExtension extends Extension {
         this._api = new ApiManager()
         let perpsResult = null
         let spotResult = null
+        let dexsResult = null
         let perpsDone = false
         let spotDone = false
+        let dexsDone = false
 
         const onComplete = () => {
-            if (perpsDone && spotDone) {
-                if (perpsResult === null && spotResult === null) {
-                    this._initWithDefaults()
-                } else {
-                    this._initWithMetadata(perpsResult, spotResult)
-                }
-                if (this._api) {
-                    this._api.destroy()
-                    this._api = null
-                }
-                if (onDone) onDone()
+            if (perpsDone && spotDone && dexsDone) {
+                this._resolveMetas(perpsResult, spotResult, dexsResult, () => {
+                    if (this._api) {
+                        this._api.destroy()
+                        this._api = null
+                    }
+                    if (onDone) onDone()
+                })
             }
         }
 
@@ -202,12 +201,59 @@ export default class HyperliquidExtension extends Extension {
             spotDone = true
             onComplete()
         })
+
+        // Dex builders HIP-3 (xyz, etc.) : chaque dex a son propre univers
+        this._api.fetchPerpDexs((err, data) => {
+            if (err) {
+                logError(err, 'Failed to fetch perp dexs')
+            } else {
+                dexsResult = data
+            }
+            dexsDone = true
+            onComplete()
+        })
     }
 
-    _initWithMetadata(perpsMeta, spotMeta) {
+    _resolveMetas(perpsMeta, spotMeta, perpDexs, onDone) {
+        if (perpsMeta === null && spotMeta === null && perpDexs === null) {
+            this._initWithDefaults()
+            onDone()
+            return
+        }
+
+        const dexNames = (perpDexs || [])
+            .filter(d => d && d.name)
+            .map(d => d.name)
+
+        if (dexNames.length === 0) {
+            this._initWithMetadataDone(perpsMeta, spotMeta, [])
+            onDone()
+            return
+        }
+
+        // Récupère l'univers de chaque dex builder, en parallèle
+        const dexMetas = []
+        let pending = dexNames.length
+        for (const dex of dexNames) {
+            this._api.fetchPerpsMeta((err, data) => {
+                if (err) {
+                    logError(err, `Failed to fetch metadata for dex ${dex}`)
+                } else {
+                    dexMetas.push({ dex: dex, universe: data.universe || [] })
+                }
+                if (--pending === 0) {
+                    this._initWithMetadataDone(perpsMeta, spotMeta, dexMetas)
+                    onDone()
+                }
+            }, dex)
+        }
+    }
+
+    _initWithMetadataDone(perpsMeta, spotMeta, dexMetas) {
         const { tickersByDex, displayNames } = this._buildAssetList(
             perpsMeta || { universe: [] },
-            spotMeta || { universe: [], tokens: [] }
+            spotMeta || { universe: [], tokens: [] },
+            dexMetas
         )
         this._setupTickers(tickersByDex, displayNames)
     }
@@ -216,34 +262,64 @@ export default class HyperliquidExtension extends Extension {
         this._setupTickers(DEFAULT_TICKERS_BY_DEX, DEFAULT_DISPLAY_NAMES)
     }
 
-    _buildAssetList(perpsMeta, spotMeta) {
-        const tickersByDex = { default: [], xyz: [] }
+    _buildAssetList(perpsMeta, spotMeta, dexMetas) {
+        const tickersByDex = { default: [] }
         const displayNames = {}
         const desired = this._config.tickers
+        const added = new Set()
 
+        // 1. Perps du dex principal (BTC, ETH…)
         const perpNames = new Set((perpsMeta.universe || []).map(u => u.name))
-        const spotUniverse = spotMeta.universe || []
-        const spotTokenNames = new Set(spotUniverse.map(u => u.name))
-
         for (const ticker of desired) {
             if (perpNames.has(ticker)) {
                 tickersByDex.default.push(ticker)
                 displayNames[ticker] = ticker
+                added.add(ticker)
             }
         }
 
-        for (const spotName of spotTokenNames) {
+        // 2. Dex builders HIP-3 : les noms d'univers sont préfixés (xyz:CL).
+        // Un même nom peut exister dans plusieurs dex (GOLD…) : premier dex
+        // trouvé gagne, l'ordre de perpDexs fait foi
+        for (const { dex, universe } of dexMetas) {
+            tickersByDex[dex] = []
+            for (const entry of universe) {
+                const name = entry.name
+                const prefix = dex + ':'
+                if (!name.startsWith(prefix)) continue
+                const bareName = name.slice(prefix.length)
+                const displayName = SPOT_DISPLAY_OVERRIDES[bareName] || bareName
+                if (added.has(bareName) || added.has(displayName)) continue
+                // L'utilisateur peut avoir configuré le nom préfixé, le nom
+                // nu ou le nom d'affichage (ex: BRENT pour xyz:CL)
+                if (desired.includes(name) || desired.includes(bareName) ||
+                    desired.includes(displayName)) {
+                    tickersByDex[dex].push(name)
+                    displayNames[name] = displayName
+                    added.add(bareName)
+                    added.add(displayName)
+                }
+            }
+        }
+
+        // 3. Tokens spot (universe xyz distinct des perps HIP-3)
+        const spotUniverse = spotMeta.universe || []
+        for (const spotName of spotUniverse.map(u => u.name)) {
             const displayName = SPOT_DISPLAY_OVERRIDES[spotName] || spotName
-            if (desired.includes(displayName)) {
+            if (!added.has(spotName) && !added.has(displayName) &&
+                (desired.includes(displayName) || desired.includes(spotName))) {
                 const subKey = 'xyz:' + spotName
+                if (!tickersByDex.xyz) tickersByDex.xyz = []
                 tickersByDex.xyz.push(subKey)
                 displayNames[subKey] = displayName
+                added.add(spotName)
+                added.add(displayName)
             }
         }
 
+        // 4. Dernier recours : ticker inconnu → perps du dex principal
         for (const ticker of desired) {
-            const alreadyAdded = Object.values(displayNames).includes(ticker)
-            if (!alreadyAdded) {
+            if (!added.has(ticker)) {
                 tickersByDex.default.push(ticker)
                 displayNames[ticker] = ticker
             }
