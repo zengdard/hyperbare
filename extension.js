@@ -57,8 +57,6 @@ export default class HyperliquidExtension extends Extension {
     }
 
     enable() {
-        this._config = loadConfig()
-
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false)
 
         this._bar = new IndicatorBar()
@@ -77,18 +75,29 @@ export default class HyperliquidExtension extends Extension {
 
         Main.panel.addToStatusArea(this.uuid, this._indicator)
 
-        this._configMonitor = monitorConfig(() => this._onConfigChanged())
+        loadConfig(config => {
+            if (!this._indicator) return
+            this._config = config
 
+            this._configMonitor = monitorConfig(() => this._onConfigChanged())
+
+            this._startInit()
+            this._staleCheckId = GLib.timeout_add_seconds(
+                GLib.PRIORITY_DEFAULT, 5,
+                () => this._checkStaleData()
+            )
+        })
+    }
+
+    _startInit(onDone = null) {
+        if (this._initIdleId) {
+            GLib.source_remove(this._initIdleId)
+        }
         this._initIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-            this._fetchMetadataAndInit()
+            this._fetchMetadataAndInit(onDone)
             this._initIdleId = null
             return GLib.SOURCE_REMOVE
         })
-
-        this._staleCheckId = GLib.timeout_add_seconds(
-            GLib.PRIORITY_DEFAULT, 5,
-            () => this._checkStaleData()
-        )
     }
 
     _onConfigChanged() {
@@ -107,34 +116,32 @@ export default class HyperliquidExtension extends Extension {
     }
 
     _applyConfigChange() {
-        const newConfig = loadConfig()
-        const tickersChanged =
-            newConfig.tickers.join(',') !== this._config.tickers.join(',')
+        if (!this._config) return
 
-        this._config = newConfig
+        loadConfig(newConfig => {
+            if (!this._indicator || !this._config) return
 
-        if (this._reinitializing || !this._indicator) return
+            const tickersChanged =
+                newConfig.tickers.join(',') !== this._config.tickers.join(',')
+            this._config = newConfig
 
-        if (!tickersChanged) {
-            // Seul l'affichage des logos a changé : on reconstruit l'UI avec
-            // les données existantes, sans toucher au WebSocket
-            this._rebuildUI()
-            return
-        }
+            if (this._reinitializing) return
 
-        this._reinitializing = true
+            if (!tickersChanged) {
+                this._rebuildUI()
+                return
+            }
 
-        if (this._ws) {
-            this._ws.stop()
-            this._ws = null
-        }
+            this._reinitializing = true
 
-        this._initIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-            this._initIdleId = null
-            this._fetchMetadataAndInit(() => {
+            if (this._ws) {
+                this._ws.stop()
+                this._ws = null
+            }
+
+            this._startInit(() => {
                 this._reinitializing = false
             })
-            return GLib.SOURCE_REMOVE
         })
     }
 
