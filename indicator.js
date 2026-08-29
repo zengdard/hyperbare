@@ -1,5 +1,4 @@
 import St from 'gi://St'
-import Clutter from 'gi://Clutter'
 
 const MAX_VISIBLE_TICKERS = 3
 
@@ -9,7 +8,7 @@ export class IndicatorBar {
         this._labels = {}
     }
 
-    createUI(tickers, showLogos = false) {
+    createUI(tickers) {
         if (!this.actor) {
             this.actor = new St.BoxLayout({
                 style: 'spacing: 5px;',
@@ -25,14 +24,6 @@ export class IndicatorBar {
                 style_class: 'hl-ticker-box',
                 style: 'spacing: 4px;',
             })
-
-            let icon = showLogos
-                ? new St.Icon({
-                      icon_size: 16,
-                      y_align: Clutter.ActorAlign.CENTER,
-                  })
-                : null
-            if (icon) itemBox.add_child(icon)
 
             let nameLabel = new St.Label({
                 text: `${ticker} `,
@@ -56,18 +47,11 @@ export class IndicatorBar {
             this.actor.add_child(itemBox)
 
             this._labels[ticker] = {
-                icon: icon,
                 price: priceLabel,
                 pct: pctLabel,
                 container: itemBox,
             }
         })
-    }
-
-    setIcon(ticker, gicon) {
-        const item = this._labels[ticker]
-        if (!item || !item.icon || !gicon) return
-        item.icon.gicon = gicon
     }
 
     update(coin, data, isStale = false) {

@@ -9,7 +9,7 @@ const CONFIG_PATH = GLib.build_filenamev([CONFIG_DIR, 'config.json'])
 export const CONFIG_FILE_PATH = CONFIG_PATH
 
 export function loadConfig() {
-    const config = { tickers: [...DEFAULT_TICKERS], showLogos: true }
+    const config = { tickers: [...DEFAULT_TICKERS] }
 
     try {
         const [ok, contents] = GLib.file_get_contents(CONFIG_PATH)
@@ -23,9 +23,6 @@ export function loadConfig() {
                     .filter(t => typeof t === 'string' && t.trim().length > 0)
                     .map(t => t.trim())
                 if (names.length > 0) config.tickers = [...new Set(names)]
-            }
-            if (typeof parsed.showLogos === 'boolean') {
-                config.showLogos = parsed.showLogos
             }
         }
     } catch (e) {
@@ -41,16 +38,11 @@ export function loadConfig() {
 
 export function saveConfig(config) {
     GLib.mkdir_with_parents(CONFIG_DIR, 0o755)
-    const json = JSON.stringify(
-        { tickers: config.tickers, showLogos: config.showLogos },
-        null,
-        4
-    )
-    GLib.file_set_contents(CONFIG_PATH, json)
+    GLib.file_set_contents(CONFIG_PATH, JSON.stringify({ tickers: config.tickers }, null, 4))
 }
 
-// Surveille le fichier de config ; callback appelé (avec anti-rebond déjà géré
-// côté appelant) à chaque écriture. Retourne le Gio.FileMonitor à détruire.
+// Surveille le fichier de config ; callback appelé (anti-rebond géré côté
+// appelant) à chaque écriture. Retourne le Gio.FileMonitor à détruire.
 export function monitorConfig(callback) {
     const file = Gio.File.new_for_path(CONFIG_PATH)
     if (!file.query_exists(null)) {

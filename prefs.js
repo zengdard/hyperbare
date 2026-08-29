@@ -13,9 +13,7 @@ export default class HyperliquidPreferences extends ExtensionPreferences {
             icon_name: 'preferences-system-symbolic',
         })
         window.add(page)
-
         page.add(this._buildTickerGroup())
-        page.add(this._buildDisplayGroup())
     }
 
     _buildTickerGroup() {
@@ -42,25 +40,6 @@ export default class HyperliquidPreferences extends ExtensionPreferences {
         group.add(addBox)
 
         this._rebuildTickerRows()
-        return group
-    }
-
-    _buildDisplayGroup() {
-        const group = new Adw.PreferencesGroup({ title: 'Affichage' })
-
-        const logosRow = new Adw.ActionRow({ title: 'Afficher les logos' })
-        const logosSwitch = new Gtk.Switch({
-            active: this._config.showLogos,
-            valign: Gtk.Align.CENTER,
-        })
-        logosSwitch.connect('notify::active', sw => {
-            this._config.showLogos = sw.get_active()
-            this._save()
-        })
-        logosRow.add_suffix(logosSwitch)
-        logosRow.activatable_widget = logosSwitch
-        group.add(logosRow)
-
         return group
     }
 

@@ -8,12 +8,10 @@ import { ApiManager } from './apiManager.js'
 import { WsManager } from './wsManager.js'
 import { IndicatorBar } from './indicator.js'
 import { PanelView } from './panelView.js'
-import { IconManager } from './iconManager.js'
 import { loadConfig, monitorConfig } from './config.js'
 
 const DATA_STALE_THRESHOLD_MS = 30000
 const UI_UPDATE_THROTTLE_MS = 200
-const MAX_HISTORY = 240
 const CONFIG_DEBOUNCE_MS = 500
 
 const DEFAULT_TICKERS_BY_DEX = {
@@ -43,10 +41,8 @@ export default class HyperliquidExtension extends Extension {
         this._bar = null
         this._view = null
         this._api = null
-        this._icons = null
         this._data = {}
         this._lastUpdate = {}
-        this._history = {}
         this._displayNames = {}
         this._config = null
         this._configMonitor = null
@@ -62,7 +58,6 @@ export default class HyperliquidExtension extends Extension {
 
     enable() {
         this._config = loadConfig()
-        this._icons = new IconManager()
 
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false)
 
@@ -145,18 +140,14 @@ export default class HyperliquidExtension extends Extension {
 
     _rebuildUI() {
         const allDisplayNames = [...new Set(Object.values(this._displayNames))]
-        this._bar.createUI(allDisplayNames, this._config.showLogos)
-        this._view.initUI(allDisplayNames, this._config.showLogos)
+        this._bar.createUI(allDisplayNames)
+        this._view.initUI(allDisplayNames)
 
         for (const coin of allDisplayNames) {
-            this._applyIcon(coin)
             const data = this._data[coin]
             if (data) {
                 this._bar.update(coin, data, false)
                 this._view.updateData(coin, data, false)
-            }
-            if (this._history[coin]) {
-                this._view.updateSparkline(coin, this._history[coin])
             }
         }
     }
@@ -333,12 +324,8 @@ export default class HyperliquidExtension extends Extension {
 
         const allDisplayNames = [...new Set(Object.values(displayNames))]
 
-        this._bar.createUI(allDisplayNames, this._config.showLogos)
-        this._view.initUI(allDisplayNames, this._config.showLogos)
-
-        for (const coin of allDisplayNames) {
-            this._applyIcon(coin)
-        }
+        this._bar.createUI(allDisplayNames)
+        this._view.initUI(allDisplayNames)
 
         if (this._ws) {
             this._ws.stop()
@@ -351,45 +338,9 @@ export default class HyperliquidExtension extends Extension {
         this._ws.start(tickersByDex, displayNames)
     }
 
-    _applyIcon(coin) {
-        if (!this._config.showLogos || !this._icons) return
-
-        // Candidats de nom pour l'URL d'icône : nom affiché, clé complet
-        // (ex 'xyz:CL') puis symbole de base ('CL')
-        const iconNames = new Set([coin])
-        for (const [key, dn] of Object.entries(this._displayNames)) {
-            if (dn !== coin) continue
-            iconNames.add(key)
-            if (key.startsWith('xyz:')) {
-                iconNames.add(key.slice(4))
-            }
-        }
-
-        this._icons.getIcon(coin, [...iconNames], gicon => {
-            if (!gicon) return
-            this._bar.setIcon(coin, gicon)
-            this._view.setIcon(coin, gicon)
-        })
-    }
-
     _onData(coin, data) {
         this._data[coin] = data
         this._lastUpdate[coin] = Date.now()
-
-        if (data.price > 0) {
-            let history = this._history[coin]
-            if (!history || history.length === 0 ||
-                history[history.length - 1] !== data.price) {
-                if (!history) {
-                    history = []
-                    this._history[coin] = history
-                }
-                history.push(data.price)
-                if (history.length > MAX_HISTORY) {
-                    history.shift()
-                }
-            }
-        }
 
         this._pendingUpdates.add(coin)
 
@@ -418,7 +369,6 @@ export default class HyperliquidExtension extends Extension {
 
             this._bar.update(coin, data, isStale)
             this._view.updateData(coin, data, isStale)
-            this._view.updateSparkline(coin, this._history[coin])
         }
 
         this._pendingUpdates.clear()
@@ -480,11 +430,6 @@ export default class HyperliquidExtension extends Extension {
             this._api = null
         }
 
-        if (this._icons) {
-            this._icons.destroy()
-            this._icons = null
-        }
-
         if (this._bar) {
             this._barBox.destroy()
             this._barBox = null
@@ -504,7 +449,6 @@ export default class HyperliquidExtension extends Extension {
 
         this._data = {}
         this._lastUpdate = {}
-        this._history = {}
         this._displayNames = {}
         this._pendingUpdates.clear()
     }
