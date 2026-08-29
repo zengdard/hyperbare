@@ -229,7 +229,6 @@ export default class HyperliquidExtension extends Extension {
             return
         }
 
-        // Récupère l'univers de chaque dex builder, en parallèle
         const dexMetas = []
         let pending = dexNames.length
         for (const dex of dexNames) {
@@ -266,7 +265,6 @@ export default class HyperliquidExtension extends Extension {
         const desired = this._config.tickers
         const added = new Set()
 
-        // 1. Perps du dex principal (BTC, ETH…)
         const perpNames = new Set((perpsMeta.universe || []).map(u => u.name))
         for (const ticker of desired) {
             if (perpNames.has(ticker)) {
@@ -276,7 +274,7 @@ export default class HyperliquidExtension extends Extension {
             }
         }
 
-        // 2. Dex builders HIP-3 : les noms d'univers sont préfixés (xyz:CL).
+        // Les noms d'univers des dex builders HIP-3 sont préfixés (xyz:CL).
         // Un même nom peut exister dans plusieurs dex (GOLD…) : premier dex
         // trouvé gagne, l'ordre de perpDexs fait foi
         for (const { dex, universe } of dexMetas) {
@@ -300,7 +298,7 @@ export default class HyperliquidExtension extends Extension {
             }
         }
 
-        // 3. Tokens spot (universe xyz distinct des perps HIP-3)
+        // L'univers spot xyz est distinct des perps HIP-3
         const spotUniverse = spotMeta.universe || []
         for (const spotName of spotUniverse.map(u => u.name)) {
             const displayName = SPOT_DISPLAY_OVERRIDES[spotName] || spotName
@@ -315,7 +313,7 @@ export default class HyperliquidExtension extends Extension {
             }
         }
 
-        // 4. Dernier recours : ticker inconnu → perps du dex principal
+        // Dernier recours : ticker inconnu → perps du dex principal
         for (const ticker of desired) {
             if (!added.has(ticker)) {
                 tickersByDex.default.push(ticker)
