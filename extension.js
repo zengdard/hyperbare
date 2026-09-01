@@ -298,7 +298,6 @@ export default class HyperliquidExtension extends Extension {
             }
         }
 
-        // L'univers spot xyz est distinct des perps HIP-3
         const spotUniverse = spotMeta.universe || []
         for (const spotName of spotUniverse.map(u => u.name)) {
             const displayName = SPOT_DISPLAY_OVERRIDES[spotName] || spotName

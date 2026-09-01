@@ -27,9 +27,8 @@ function parseConfig(contents) {
     return config
 }
 
-// Lecture asynchrone (le code shell doit éviter les E/S de fichier
-// synchrones). callback(config) est toujours invoqué, avec les défauts
-// si le fichier est absent ou invalide.
+// callback(config) toujours invoqué, avec les défauts si le fichier
+// est absent ou invalide.
 export function loadConfig(callback) {
     const file = Gio.File.new_for_path(CONFIG_PATH)
     file.load_contents_async(null, (f, res) => {
@@ -50,8 +49,7 @@ export function saveConfig(config) {
     GLib.file_set_contents(CONFIG_PATH, JSON.stringify({ tickers: config.tickers }, null, 4))
 }
 
-// Surveille le fichier de config ; callback appelé (anti-rebond géré côté
-// appelant) à chaque écriture. Retourne le Gio.FileMonitor à détruire.
+// L'anti-rebond des émissions multiples est géré côté appelant.
 export function monitorConfig(callback) {
     const file = Gio.File.new_for_path(CONFIG_PATH)
     if (!file.query_exists(null)) {
