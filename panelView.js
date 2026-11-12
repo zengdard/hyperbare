@@ -1,4 +1,7 @@
 import St from 'gi://St'
+import Clutter from 'gi://Clutter'
+
+import { formatPrice } from './format.js'
 
 const NAME_W = 70
 const PRICE_W = 100
@@ -31,7 +34,7 @@ export class PanelView {
         item.row.style = 'spacing: 15px; align: center; opacity: 1.0;'
 
         let p = data.price
-        let priceText = p >= 1000 ? `${p.toFixed(0)} USDC` : `${p.toFixed(2)} USDC`
+        let priceText = formatPrice(p)
         item.priceLabel.set_text(priceText)
 
         let arrow = data.pct >= 0 ? '▲' : '▼'
@@ -50,7 +53,7 @@ export class PanelView {
     initUI(tickers) {
         if (!this.box) {
             this.box = new St.BoxLayout({
-                vertical: true,
+                orientation: Clutter.Orientation.VERTICAL,
                 style: 'padding: 15px; spacing: 12px;',
             })
         }
@@ -68,7 +71,7 @@ export class PanelView {
 
         this.box.add_child(headerRow)
 
-        let list = new St.BoxLayout({ vertical: true, style: 'spacing: 8px; padding-top: 8px;' })
+        let list = new St.BoxLayout({ orientation: Clutter.Orientation.VERTICAL, style: 'spacing: 8px; padding-top: 8px;' })
 
         tickers.forEach(coin => {
             let row = new St.BoxLayout({

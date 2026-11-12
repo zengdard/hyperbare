@@ -1,4 +1,5 @@
 import St from 'gi://St'
+import Clutter from 'gi://Clutter'
 import GLib from 'gi://GLib'
 import * as Main from 'resource:///org/gnome/shell/ui/main.js'
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js'
@@ -8,7 +9,7 @@ import { ApiManager } from './apiManager.js'
 import { WsManager } from './wsManager.js'
 import { IndicatorBar } from './indicator.js'
 import { PanelView } from './panelView.js'
-import { loadConfig, monitorConfig } from './config.js'
+import { loadConfig, monitorConfig, DEFAULT_TICKERS } from './config.js'
 
 const DATA_STALE_THRESHOLD_MS = 30000
 const UI_UPDATE_THROTTLE_MS = 200
@@ -33,6 +34,20 @@ const SPOT_DISPLAY_OVERRIDES = {
     'CL': 'BRENT',
 }
 
+// Table de repli utilisée si toutes les métadonnées réseau échouent.
+// Elle permet de respecter la configuration de l'utilisateur au lieu de
+// réafficher des tickers codés en dur.
+const DEFAULT_KEY_BY_TICKER = new Map()
+for (const [dex, keys] of Object.entries(DEFAULT_TICKERS_BY_DEX)) {
+    for (const key of keys) {
+        DEFAULT_KEY_BY_TICKER.set(key, { dex, key })
+        const displayName = DEFAULT_DISPLAY_NAMES[key]
+        if (displayName) DEFAULT_KEY_BY_TICKER.set(displayName, { dex, key })
+        const colon = key.indexOf(':')
+        if (colon !== -1) DEFAULT_KEY_BY_TICKER.set(key.slice(colon + 1), { dex, key })
+    }
+}
+
 export default class HyperliquidExtension extends Extension {
     constructor(metadata) {
         super(metadata)
@@ -48,6 +63,7 @@ export default class HyperliquidExtension extends Extension {
         this._configMonitor = null
         this._configDebounceId = null
         this._reinitializing = false
+        this._configDirty = false
         this._staleCheckId = null
         this._initIdleId = null
         this._pendingUpdates = new Set()
@@ -66,7 +82,7 @@ export default class HyperliquidExtension extends Extension {
 
         this._view = new PanelView()
         this._viewBox = new St.BoxLayout({
-            vertical: true,
+            orientation: Clutter.Orientation.VERTICAL,
             style: 'padding: 15px; spacing: 12px;',
         })
         this._view.box = this._viewBox
@@ -125,10 +141,14 @@ export default class HyperliquidExtension extends Extension {
                 newConfig.tickers.join(',') !== this._config.tickers.join(',')
             this._config = newConfig
 
-            if (this._reinitializing) return
-
             if (!tickersChanged) {
                 this._rebuildUI()
+                return
+            }
+
+            if (this._reinitializing) {
+                // Une réinitialisation est en cours : on la relancera à la fin.
+                this._configDirty = true
                 return
             }
 
@@ -141,11 +161,17 @@ export default class HyperliquidExtension extends Extension {
 
             this._startInit(() => {
                 this._reinitializing = false
+                if (this._configDirty) {
+                    this._configDirty = false
+                    this._applyConfigChange()
+                }
             })
         })
     }
 
     _rebuildUI() {
+        if (!this._bar || !this._view) return
+
         const allDisplayNames = [...new Set(Object.values(this._displayNames))]
         this._bar.createUI(allDisplayNames)
         this._view.initUI(allDisplayNames)
@@ -160,7 +186,16 @@ export default class HyperliquidExtension extends Extension {
     }
 
     _fetchMetadataAndInit(onDone = null) {
-        this._api = new ApiManager()
+        if (!this._indicator) return
+
+        // Annule une éventuelle initialisation précédente encore en cours.
+        if (this._api) {
+            this._api.destroy()
+            this._api = null
+        }
+
+        const api = new ApiManager()
+        this._api = api
         let perpsResult = null
         let spotResult = null
         let dexsResult = null
@@ -169,10 +204,11 @@ export default class HyperliquidExtension extends Extension {
         let dexsDone = false
 
         const onComplete = () => {
+            if (this._api !== api) return
             if (perpsDone && spotDone && dexsDone) {
-                this._resolveMetas(perpsResult, spotResult, dexsResult, () => {
-                    if (this._api) {
-                        this._api.destroy()
+                this._resolveMetas(perpsResult, spotResult, dexsResult, api, () => {
+                    if (this._api === api) {
+                        api.destroy()
                         this._api = null
                     }
                     if (onDone) onDone()
@@ -180,7 +216,8 @@ export default class HyperliquidExtension extends Extension {
             }
         }
 
-        this._api.fetchPerpsMeta((err, data) => {
+        api.fetchPerpsMeta((err, data) => {
+            if (this._api !== api) return
             if (err) {
                 logError(err, 'Failed to fetch perps metadata')
             } else {
@@ -190,7 +227,8 @@ export default class HyperliquidExtension extends Extension {
             onComplete()
         })
 
-        this._api.fetchSpotMeta((err, data) => {
+        api.fetchSpotMeta((err, data) => {
+            if (this._api !== api) return
             if (err) {
                 logError(err, 'Failed to fetch spot metadata')
             } else {
@@ -201,7 +239,8 @@ export default class HyperliquidExtension extends Extension {
         })
 
         // Dex builders HIP-3 (xyz, etc.) : chaque dex a son propre univers
-        this._api.fetchPerpDexs((err, data) => {
+        api.fetchPerpDexs((err, data) => {
+            if (this._api !== api) return
             if (err) {
                 logError(err, 'Failed to fetch perp dexs')
             } else {
@@ -212,7 +251,12 @@ export default class HyperliquidExtension extends Extension {
         })
     }
 
-    _resolveMetas(perpsMeta, spotMeta, perpDexs, onDone) {
+    _resolveMetas(perpsMeta, spotMeta, perpDexs, api, onDone) {
+        if (this._api !== api) {
+            if (onDone) onDone()
+            return
+        }
+
         if (perpsMeta === null && spotMeta === null && perpDexs === null) {
             this._initWithDefaults()
             onDone()
@@ -232,7 +276,8 @@ export default class HyperliquidExtension extends Extension {
         const dexMetas = []
         let pending = dexNames.length
         for (const dex of dexNames) {
-            this._api.fetchPerpsMeta((err, data) => {
+            api.fetchPerpsMeta((err, data) => {
+                if (this._api !== api) return
                 if (err) {
                     logError(err, `Failed to fetch metadata for dex ${dex}`)
                 } else {
@@ -247,6 +292,8 @@ export default class HyperliquidExtension extends Extension {
     }
 
     _initWithMetadataDone(perpsMeta, spotMeta, dexMetas) {
+        if (!this._indicator) return
+
         const { tickersByDex, displayNames } = this._buildAssetList(
             perpsMeta || { universe: [] },
             spotMeta || { universe: [], tokens: [] },
@@ -256,29 +303,46 @@ export default class HyperliquidExtension extends Extension {
     }
 
     _initWithDefaults() {
-        this._setupTickers(DEFAULT_TICKERS_BY_DEX, DEFAULT_DISPLAY_NAMES)
+        const desired = this._config?.tickers ?? DEFAULT_TICKERS
+        const tickersByDex = { default: [] }
+        const displayNames = {}
+
+        for (const ticker of desired) {
+            const resolved = DEFAULT_KEY_BY_TICKER.get(ticker) ||
+                { dex: 'default', key: ticker }
+            if (displayNames[resolved.key]) continue
+
+            if (!tickersByDex[resolved.dex]) tickersByDex[resolved.dex] = []
+            tickersByDex[resolved.dex].push(resolved.key)
+            displayNames[resolved.key] =
+                DEFAULT_DISPLAY_NAMES[resolved.key] || ticker
+        }
+
+        this._setupTickers(tickersByDex, displayNames)
     }
 
-    _buildAssetList(perpsMeta, spotMeta, dexMetas) {
+    _buildAssetList(perpsMeta, _spotMeta, dexMetas) {
         const tickersByDex = { default: [] }
         const displayNames = {}
         const desired = this._config.tickers
         const added = new Set()
+        // ticker demandé -> { dex, key, displayName }
+        const resolved = new Map()
 
         const perpNames = new Set((perpsMeta.universe || []).map(u => u.name))
         for (const ticker of desired) {
-            if (perpNames.has(ticker)) {
-                tickersByDex.default.push(ticker)
-                displayNames[ticker] = ticker
-                added.add(ticker)
-            }
+            if (!perpNames.has(ticker) || resolved.has(ticker)) continue
+            tickersByDex.default.push(ticker)
+            displayNames[ticker] = ticker
+            resolved.set(ticker, { dex: 'default', key: ticker, displayName: ticker })
+            added.add(ticker)
         }
 
         // Les noms d'univers des dex builders HIP-3 sont préfixés (xyz:CL).
         // Un même nom peut exister dans plusieurs dex (GOLD…) : premier dex
-        // trouvé gagne, l'ordre de perpDexs fait foi
+        // trouvé gagne.
         for (const { dex, universe } of dexMetas) {
-            tickersByDex[dex] = []
+            if (!tickersByDex[dex]) tickersByDex[dex] = []
             for (const entry of universe) {
                 const name = entry.name
                 const prefix = dex + ':'
@@ -286,44 +350,51 @@ export default class HyperliquidExtension extends Extension {
                 const bareName = name.slice(prefix.length)
                 const displayName = SPOT_DISPLAY_OVERRIDES[bareName] || bareName
                 if (added.has(bareName) || added.has(displayName)) continue
-                // L'utilisateur peut avoir configuré le nom préfixé, le nom
-                // nu ou le nom d'affichage (ex: BRENT pour xyz:CL)
-                if (desired.includes(name) || desired.includes(bareName) ||
-                    desired.includes(displayName)) {
-                    tickersByDex[dex].push(name)
-                    displayNames[name] = displayName
-                    added.add(bareName)
-                    added.add(displayName)
-                }
-            }
-        }
 
-        const spotUniverse = spotMeta.universe || []
-        for (const spotName of spotUniverse.map(u => u.name)) {
-            const displayName = SPOT_DISPLAY_OVERRIDES[spotName] || spotName
-            if (!added.has(spotName) && !added.has(displayName) &&
-                (desired.includes(displayName) || desired.includes(spotName))) {
-                const subKey = 'xyz:' + spotName
-                if (!tickersByDex.xyz) tickersByDex.xyz = []
-                tickersByDex.xyz.push(subKey)
-                displayNames[subKey] = displayName
-                added.add(spotName)
+                // L'utilisateur peut avoir configuré le nom préfixé, le nom
+                // nu ou le nom d'affichage (ex: BRENT pour xyz:CL).
+                let wanted = null
+                if (desired.includes(name)) wanted = name
+                else if (desired.includes(bareName)) wanted = bareName
+                else if (desired.includes(displayName)) wanted = displayName
+                if (!wanted) continue
+
+                tickersByDex[dex].push(name)
+                displayNames[name] = displayName
+                resolved.set(wanted, { dex, key: name, displayName })
+                added.add(bareName)
                 added.add(displayName)
             }
         }
 
+        // Le support des actifs spot n'est pas implémenté ici : les entrées de
+        // spotMeta.universe sont des paires (PURR/USDC, @1), pas des tokens.
+        // Les abonnements « xyz:<paire> » de l'ancien code étaient invalides.
+
         // Dernier recours : ticker inconnu → perps du dex principal
         for (const ticker of desired) {
-            if (!added.has(ticker)) {
-                tickersByDex.default.push(ticker)
-                displayNames[ticker] = ticker
-            }
+            if (resolved.has(ticker) || added.has(ticker)) continue
+            tickersByDex.default.push(ticker)
+            displayNames[ticker] = ticker
+            resolved.set(ticker, { dex: 'default', key: ticker, displayName: ticker })
         }
 
-        return { tickersByDex, displayNames }
+        // Reconstruit l'ordre d'affichage selon la configuration utilisateur,
+        // y compris pour les tickers de dex (BRENT, XYZ100, GOLD…).
+        const orderedDisplayNames = {}
+        for (const ticker of desired) {
+            const item = resolved.get(ticker)
+            if (!item) continue
+            if (!(item.key in orderedDisplayNames))
+                orderedDisplayNames[item.key] = item.displayName
+        }
+
+        return { tickersByDex, displayNames: orderedDisplayNames }
     }
 
     _setupTickers(tickersByDex, displayNames) {
+        if (!this._indicator || !this._bar || !this._view) return
+
         this._displayNames = displayNames
 
         const allDisplayNames = [...new Set(Object.values(displayNames))]
@@ -343,6 +414,8 @@ export default class HyperliquidExtension extends Extension {
     }
 
     _onData(coin, data) {
+        if (!this._indicator) return
+
         this._data[coin] = data
         this._lastUpdate[coin] = Date.now()
 
@@ -455,5 +528,7 @@ export default class HyperliquidExtension extends Extension {
         this._lastUpdate = {}
         this._displayNames = {}
         this._pendingUpdates.clear()
+        this._reinitializing = false
+        this._configDirty = false
     }
 }

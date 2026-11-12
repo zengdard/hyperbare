@@ -46,7 +46,23 @@ export function loadConfig(callback) {
 
 export function saveConfig(config) {
     GLib.mkdir_with_parents(CONFIG_DIR, 0o755)
-    GLib.file_set_contents(CONFIG_PATH, JSON.stringify({ tickers: config.tickers }, null, 4))
+    const file = Gio.File.new_for_path(CONFIG_PATH)
+    const contents = new TextEncoder().encode(
+        JSON.stringify({ tickers: config.tickers }, null, 4)
+    )
+    try {
+        // Écriture atomique : évite un JSON partiel si le processus s'arrête
+        // en pleine écriture, et déclenche bien le monitor de fichier.
+        file.replace_contents(
+            contents,
+            null,
+            false,
+            Gio.FileCreateFlags.REPLACE_DESTINATION,
+            null
+        )
+    } catch (e) {
+        logError(e, 'Failed to save config')
+    }
 }
 
 // L'anti-rebond des émissions multiples est géré côté appelant.

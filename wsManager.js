@@ -48,18 +48,27 @@ export const WsManager = GObject.registerClass(
         this._displayNames = {}
     }
 
+    _detachWs(conn) {
+        if (!conn.ws) return
+        for (const id of conn.handlers)
+            conn.ws.disconnect(id)
+        conn.handlers = []
+        conn.ws = null
+    }
+
     _closeConn(conn) {
         if (conn.reconnectId) {
             GLib.source_remove(conn.reconnectId)
             conn.reconnectId = null
         }
         if (conn.ws) {
-            for (const id of conn.handlers) {
-                conn.ws.disconnect(id)
+            const ws = conn.ws
+            this._detachWs(conn)
+            try {
+                ws.close(0, '')
+            } catch (_e) {
+                // Le socket peut déjà être fermé.
             }
-            conn.handlers = []
-            conn.ws.close(0, '')
-            conn.ws = null
         }
     }
 
@@ -138,12 +147,16 @@ export const WsManager = GObject.registerClass(
 
     _onWsClosed(dex) {
         const conn = this._connections.get(dex)
-        if (conn) this._scheduleReconnect(dex)
+        if (!conn) return
+        this._detachWs(conn)
+        this._scheduleReconnect(dex)
     }
 
     _onWsError(dex, _ws, _error) {
         const conn = this._connections.get(dex)
-        if (conn) this._scheduleReconnect(dex)
+        if (!conn) return
+        this._detachWs(conn)
+        this._scheduleReconnect(dex)
     }
 
     _onWsMessage(_connection, type, data) {

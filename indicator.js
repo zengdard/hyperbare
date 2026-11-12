@@ -1,4 +1,7 @@
 import St from 'gi://St'
+import Clutter from 'gi://Clutter'
+
+import { formatPrice } from './format.js'
 
 const MAX_VISIBLE_TICKERS = 3
 
@@ -27,17 +30,17 @@ export class IndicatorBar {
 
             let nameLabel = new St.Label({
                 text: `${ticker} `,
-                y_align: 2,
+                y_align: Clutter.ActorAlign.CENTER,
                 style: 'font-weight: bold;',
             })
             let priceLabel = new St.Label({
                 text: '—',
-                y_align: 2,
+                y_align: Clutter.ActorAlign.CENTER,
                 style: 'color: #888;',
             })
             let pctLabel = new St.Label({
                 text: '',
-                y_align: 2,
+                y_align: Clutter.ActorAlign.CENTER,
             })
 
             itemBox.add_child(nameLabel)
@@ -68,7 +71,7 @@ export class IndicatorBar {
         labels.container.style = 'spacing: 4px; opacity: 1.0;'
 
         let p = data.price
-        let priceText = p >= 1000 ? `${p.toFixed(0)} USDC` : `${p.toFixed(2)} USDC`
+        let priceText = formatPrice(p)
         labels.price.set_text(priceText)
         labels.price.style = 'color: #fff;'
 

@@ -6,9 +6,17 @@ import { loadConfig, saveConfig } from './config.js'
 
 export default class HyperliquidPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
+        let closed = false
+        window.connect('close-request', () => {
+            closed = true
+            return false
+        })
+
         // Tout l'état est local à la fenêtre (pas de champs d'instance à
         // nettoyer au close-request)
         loadConfig(config => {
+            if (closed) return
+
             const page = new Adw.PreferencesPage({
                 title: 'General',
                 icon_name: 'preferences-system-symbolic',

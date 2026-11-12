@@ -5,10 +5,6 @@ A GNOME Shell extension that displays real-time cryptocurrency prices from Hyper
 ![GNOME Shell Version](https://img.shields.io/badge/GNOME-45%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-## Screenshot
-
-![Extension Screenshot](screenshot.png)
-
 ## Demo Video
 
 https://github.com/user-attachments/assets/demo.mp4
@@ -19,8 +15,7 @@ https://github.com/user-attachments/assets/demo.mp4
 
 - **Real-time price updates** via WebSocket connection to Hyperliquid
 - **Top 3 tickers** displayed directly in the top panel for quick glance
-- **Expandable menu** - Click the indicator to see all available tickers with sparkline charts
-- **Sparkline charts** - Visual price history for each cryptocurrency
+- **Expandable menu** - Click the indicator to see all available tickers
 - **Customizable** - Configure which tickers to display
 
 ## Installation
@@ -29,8 +24,8 @@ https://github.com/user-attachments/assets/demo.mp4
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/hyperliquid-gnome-extension.git
-cd hyperliquid-gnome-extension
+git clone https://github.com/zengdard/hyperbare.git
+cd hyperbare
 ```
 
 2. Install the extension locally:
@@ -48,14 +43,13 @@ ln -s "$(pwd)" ~/.local/share/gnome-shell/extensions/hyperliquid-bar@hyperbare
 
 ### Requirements
 
-- GNOME Shell 45, 46, 47, 48, or 49
+- GNOME Shell 45, 46, 47, 48, 49 or 50
 - GJS (GObject Introspection)
 
 ## Usage
 
 - **Top panel view**: See the top 3 cryptocurrencies by default
-- **Click to expand**: Click the indicator to open the dropdown menu with all tickers and price charts
-- **Sparklines**: Each ticker shows a mini price history chart
+- **Click to expand**: Click the indicator to open the dropdown menu with all tickers
 
 ## Files
 
@@ -64,7 +58,7 @@ ln -s "$(pwd)" ~/.local/share/gnome-shell/extensions/hyperliquid-bar@hyperbare
 - `stylesheet.css` - Styling for the extension
 - `wsManager.js` - WebSocket connection manager
 - `indicator.js` - Top panel indicator UI
-- `panelView.js` - Dropdown menu UI with sparklines
+- `panelView.js` - Dropdown menu UI
 
 ## Development
 

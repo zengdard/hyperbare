@@ -6,6 +6,8 @@ const INFO_URL = 'https://api.hyperliquid.xyz/info'
 export class ApiManager {
     constructor() {
         this._session = new Soup.Session()
+        // Évite qu'une requête bloquée fige indéfiniment l'initialisation.
+        this._session.timeout = 15
     }
 
     fetchPerpsMeta(callback, dex = null) {
